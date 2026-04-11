@@ -94,6 +94,7 @@ export default function App() {
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
   const [userImage, setUserImage] = useState<string | null>(null);
   const [thumbnailStyle, setThumbnailStyle] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   const handleImageUpload = (e: any) => {
     const file = e.target.files?.[0];
@@ -113,6 +114,7 @@ export default function App() {
     if (!title && !topic) return;
 
     setIsGeneratingThumbnail(true);
+    setError(null);
     try {
       const ai = getAI();
       const stylePrompt = thumbnailStyle.trim() 
@@ -154,8 +156,9 @@ export default function App() {
           break;
         }
       }
-    } catch (error) {
-      console.error("Thumbnail generation failed:", error);
+    } catch (err: any) {
+      console.error("Thumbnail generation failed:", err);
+      setError(err.message || "Failed to generate thumbnail. Please check your API key.");
     } finally {
       setIsGeneratingThumbnail(false);
     }
@@ -164,6 +167,7 @@ export default function App() {
   const generateAIContent = async (platform?: Platform) => {
     if (!topic.trim()) return;
     setIsGenerating(true);
+    setError(null);
     try {
       const ai = getAI();
       const platformName = platform ? PLATFORMS.find(p => p.id === platform)?.name : 'general';
@@ -214,8 +218,9 @@ export default function App() {
           hashtags: formattedTags
         }));
       }
-    } catch (error) {
-      console.error("AI Generation failed:", error);
+    } catch (err: any) {
+      console.error("AI Generation failed:", err);
+      setError(err.message || "Failed to generate content. Please check your API key.");
     } finally {
       setIsGenerating(false);
     }
@@ -309,6 +314,31 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-[#1A1A1A] font-sans selection:bg-blue-100">
+      {/* Error Banner */}
+      <AnimatePresence>
+        {error && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-red-600 text-white px-6 py-3 flex items-center justify-between sticky top-0 z-50 shadow-lg"
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-1 rounded-full">
+                <X className="w-4 h-4" />
+              </div>
+              <p className="text-sm font-medium">{error}</p>
+            </div>
+            <button 
+              onClick={() => setError(null)}
+              className="text-white/60 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4 justify-between">
