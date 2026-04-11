@@ -1,0 +1,23 @@
+{
+  "entities": {
+    "users": {
+      "title": "User",
+      "description": "User profile and settings",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "geminiApiKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User documents stored by their UID"
+    }
+  }
+}

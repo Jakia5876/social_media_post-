@@ -28,18 +28,42 @@ import {
   RefreshCw,
   Upload,
   Palette,
-  Trash2
+  Trash2,
+  Video,
+  LogOut,
+  User,
+  Settings,
+  ShieldCheck,
+  Users,
+  Key,
+  LogIn,
+  UserPlus,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI, Type as GeminiType } from "@google/genai";
+import { auth, db } from './firebase';
+import { 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { 
+  doc, 
+  getDoc, 
+  setDoc, 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy,
+  deleteDoc,
+  serverTimestamp,
+  deleteField
+} from 'firebase/firestore';
 
-const getAI = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not set. Please add it to your environment variables.');
-  }
-  return new GoogleGenAI({ apiKey });
-};
+
 
 type Platform = 'youtube' | 'tiktok' | 'facebook' | 'instagram' | 'linkedin' | 'x';
 
@@ -60,6 +84,36 @@ const PLATFORMS: PlatformConfig[] = [
   { id: 'x', name: 'X', icon: Twitter, color: 'bg-slate-900', placeholder: 'What\'s happening?' },
 ];
 
+const Logo = ({ className = "w-10 h-10" }: { className?: string }) => (
+  <div className={`${className} flex items-center justify-center overflow-hidden rounded-xl bg-[#000B18] shadow-inner`}>
+    <svg viewBox="0 0 100 100" className="w-full h-full p-1">
+      {/* Outer circuit ring */}
+      <circle cx="50" cy="50" r="42" fill="none" stroke="#00A3FF" strokeWidth="1" strokeDasharray="2 2" opacity="0.5" />
+      <circle cx="50" cy="50" r="38" fill="none" stroke="#00A3FF" strokeWidth="0.5" opacity="0.3" />
+      
+      {/* Circuit lines/dots */}
+      {[0, 45, 90, 135, 180, 225, 270, 315].map(angle => (
+        <g key={angle} transform={`rotate(${angle} 50 50)`}>
+          <line x1="50" y1="8" x2="50" y2="15" stroke="#00A3FF" strokeWidth="1" />
+          <circle cx="50" cy="8" r="1.5" fill="#00A3FF" />
+        </g>
+      ))}
+
+      {/* A3M Text */}
+      <text x="50" y="52" textAnchor="middle" style={{ fontSize: '24px', fontWeight: '900', fontFamily: 'Inter, sans-serif' }}>
+        <tspan fill="#FFB800">A</tspan>
+        <tspan fill="#00A3FF">3</tspan>
+        <tspan fill="#FF4D00">M</tspan>
+      </text>
+      
+      {/* IT TECH Text */}
+      <text x="50" y="72" textAnchor="middle" fill="white" style={{ fontSize: '8px', fontWeight: 'bold', letterSpacing: '2px', fontFamily: 'Inter, sans-serif' }}>
+        IT TECH
+      </text>
+    </svg>
+  </div>
+);
+
 interface PostData {
   title: string;
   description: string;
@@ -72,6 +126,17 @@ interface PostData {
 }
 
 export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserRole, setNewUserRole] = useState<'user' | 'admin'>('user');
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showUserPanel, setShowUserPanel] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+
   const [activePlatform, setActivePlatform] = useState<Platform>('youtube');
   const [postData, setPostData] = useState<PostData>({
     title: '',
@@ -92,15 +157,190 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [videoProgress, setVideoProgress] = useState<string>('');
   const [userImage, setUserImage] = useState<string | null>(null);
   const [thumbnailStyle, setThumbnailStyle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [localApiKey, setLocalApiKey] = useState(localStorage.getItem('GEMINI_API_KEY') || '');
 
+  // Firebase Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setUser(firebaseUser);
+      if (firebaseUser) {
+        const userRef = doc(db, 'users', firebaseUser.uid);
+        const userDoc = await getDoc(userRef);
+        
+        if (userDoc.exists()) {
+          const data = userDoc.data();
+          setUserProfile(data);
+          if (data.geminiApiKey) {
+            setLocalApiKey(data.geminiApiKey);
+          }
+          // Update last login
+          await setDoc(userRef, { lastLogin: serverTimestamp() }, { merge: true });
+        } else {
+          // Check if there's a pending invitation/profile by email
+          // (This is a simplified version, ideally you'd query by email)
+          const newProfile = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            role: firebaseUser.email === 'jakiadantal@gmail.com' ? 'admin' : 'user',
+            createdAt: serverTimestamp(),
+            lastLogin: serverTimestamp(),
+          };
+          await setDoc(userRef, newProfile);
+          setUserProfile(newProfile);
+        }
+      } else {
+        setUserProfile(null);
+      }
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Admin: Listen to all users
+  useEffect(() => {
+    if (userProfile?.role === 'admin') {
+      const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        setAllUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      });
+      return () => unsubscribe();
+    }
+  }, [userProfile]);
+
+  const handleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      setError("Login failed: " + err.message);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    setShowAdminPanel(false);
+    setShowUserPanel(false);
+  };
+
+  const deleteUser = async (userId: string) => {
+    if (window.confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
+      try {
+        await deleteDoc(doc(db, 'users', userId));
+      } catch (err: any) {
+        setError("Failed to delete user: " + err.message);
+      }
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUserEmail.trim()) return;
+    try {
+      // We create a document with a random ID or the email as ID
+      // Using email as ID for "pre-authorized" users is easier to find
+      const userRef = doc(db, 'users', `invited_${newUserEmail.replace(/\./g, '_')}`);
+      await setDoc(userRef, {
+        email: newUserEmail,
+        role: newUserRole,
+        createdAt: serverTimestamp(),
+        isInvited: true
+      });
+      setNewUserEmail('');
+      setShowAddUser(false);
+    } catch (err: any) {
+      setError("Failed to add user: " + err.message);
+    }
+  };
+
+  const updateUserRole = async (userId: string, newRole: string) => {
+    await setDoc(doc(db, 'users', userId), { role: newRole }, { merge: true });
+  };
+
+  const saveUserApiKey = async (key: string) => {
+    if (user) {
+      if (window.confirm("Are you sure you want to save this API key? This will override your current settings.")) {
+        await setDoc(doc(db, 'users', user.uid), { geminiApiKey: key }, { merge: true });
+        setLocalApiKey(key);
+        localStorage.setItem('GEMINI_API_KEY', key);
+        setError(null);
+        // Show success feedback
+        const btn = document.getElementById('save-key-btn');
+        if (btn) {
+          const originalText = btn.innerText;
+          btn.innerText = "✅ KEY SAVED!";
+          btn.classList.replace('bg-blue-600', 'bg-green-600');
+          setTimeout(() => {
+            btn.innerText = originalText;
+            btn.classList.replace('bg-green-600', 'bg-blue-600');
+          }, 2000);
+        }
+      }
+    }
+  };
+
+  const clearUserApiKey = async () => {
+    if (user) {
+      if (window.confirm("Are you sure you want to clear your API key? The app will revert to the default fallback key.")) {
+        await setDoc(doc(db, 'users', user.uid), { geminiApiKey: deleteField() }, { merge: true });
+        setLocalApiKey('');
+        localStorage.removeItem('GEMINI_API_KEY');
+        const input = document.getElementById('api-key-input') as HTMLInputElement;
+        if (input) input.value = '';
+        setError(null);
+      }
+    }
+  };
+
+  const loadDemoData = () => {
+    setTopic("Healthy Morning Routine");
+    setPostData({
+      title: "5 Habits for a Productive Morning ☀️",
+      description: "Start your day right with these 5 simple habits:\n1. Hydrate first thing\n2. No screens for 30 mins\n3. Light stretching\n4. Mindful meditation\n5. High-protein breakfast\n\nWhich one is your favorite? Let us know below! 👇",
+      hashtags: ["#MorningRoutine", "#Productivity", "#Wellness", "#HealthyHabits", "#MorningVibes"],
+      overrides: {
+        youtube: {
+          title: "MY MORNING ROUTINE: 5 Habits That Changed My Life",
+          description: "In this video, I share the 5 morning habits that have completely transformed my productivity and mental health. These are simple, science-backed routines you can start today!",
+          hashtags: ["#MorningRoutine", "#ProductivityTips", "#SelfCare", "#MorningVibes", "#HabitStacking"]
+        },
+        tiktok: {
+          title: "Morning Routine Hack! ☀️",
+          description: "Stop scrolling and start living! 5 habits to change your life. #MorningRoutine #Wellness",
+          hashtags: ["#MorningRoutine", "#Wellness", "#Productivity", "#LifeHack", "#MorningVibes"]
+        },
+        facebook: {},
+        instagram: {},
+        linkedin: {
+          title: "The CEO Morning Routine: Optimizing for Performance",
+          description: "Success isn't accidental; it's built in the first 60 minutes of your day. Here are 5 habits I've implemented to ensure peak performance.",
+          hashtags: ["#Leadership", "#Productivity", "#MorningRoutine", "#ProfessionalDevelopment", "#Performance"]
+        },
+        x: {
+          title: "Morning Routine 101",
+          description: "5 habits for a better day: 1. Water 2. No phone 3. Move 4. Meditate 5. Protein. Simple but effective.",
+          hashtags: ["#MorningRoutine", "#Productivity", "#Wellness"]
+        },
+      },
+    });
+    setThumbnailUrl("https://picsum.photos/seed/morning/1280/720");
+  };
+
   const getAI = () => {
-    const apiKey = process.env.GEMINI_API_KEY || localApiKey;
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY is not set. Please add it to your environment variables or enter it below.');
+    // Priority: User Profile Key > Local Storage > Environment Variable > Hardcoded Fallback
+    let apiKey = userProfile?.geminiApiKey || localApiKey || process.env.GEMINI_API_KEY || 'AIzaSyD9iT9fqca95AegcowEu1bYoSsjgPZ59gY';
+    
+    // Clean up key if it's accidentally set to "undefined" or "null" as strings
+    if (apiKey === 'undefined' || apiKey === 'null' || !apiKey) {
+      apiKey = 'AIzaSyD9iT9fqca95AegcowEu1bYoSsjgPZ59gY';
+    }
+
+    if (!apiKey || apiKey.length < 10) {
+      throw new Error('API Key is missing. Please set it in your User Settings.');
     }
     return new GoogleGenAI({ apiKey });
   };
@@ -159,16 +399,25 @@ export default function App() {
         contents.parts[1].text = `Using the provided image as context or inspiration, ${contents.parts[1].text}`;
       }
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-image',
-        contents,
-        config: {
-          imageConfig: {
-            aspectRatio: activePlatform === 'youtube' ? '16:9' : 
-                         activePlatform === 'tiktok' || activePlatform === 'instagram' ? '9:16' : '1:1'
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash-image',
+          contents,
+          config: {
+            imageConfig: {
+              aspectRatio: activePlatform === 'youtube' ? '16:9' : 
+                           activePlatform === 'tiktok' || activePlatform === 'instagram' ? '9:16' : '1:1'
+            }
           }
+        });
+      } catch (e: any) {
+        if (e.message?.includes('not found') || e.message?.includes('404')) {
+          // Fallback to a more stable model if available, though image generation is specific
+          throw new Error("The image generation model is not available for your API key yet. Please try again later or use a different key.");
         }
-      });
+        throw e;
+      }
 
       for (const part of response.candidates?.[0]?.content?.parts || []) {
         if (part.inlineData) {
@@ -184,8 +433,64 @@ export default function App() {
     }
   };
 
+  const generateVideo = async () => {
+    const title = getDisplayValue('title', activePlatform);
+    const description = getDisplayValue('description', activePlatform);
+    
+    if (!title && !topic) return;
+
+    setIsGeneratingVideo(true);
+    setVideoProgress('Initializing Veo...');
+    setError(null);
+    try {
+      const ai = getAI();
+      const platformName = PLATFORMS.find(p => p.id === activePlatform)?.name;
+      
+      const prompt = `Create a high-energy, professional promotional video for ${platformName}. 
+      Title: "${title || topic}". 
+      Content: "${description || topic}". 
+      The video should be visually engaging, modern, and perfectly suited for ${platformName}'s audience.`;
+
+      const operation = await ai.models.generateVideos({
+        model: 'veo-3.1-lite-generate-preview',
+        prompt,
+        config: {
+          numberOfVideos: 1,
+          resolution: '1080p',
+          aspectRatio: activePlatform === 'youtube' ? '16:9' : 
+                       activePlatform === 'tiktok' || activePlatform === 'instagram' ? '9:16' : '1:1'
+        }
+      });
+
+      setVideoProgress('Generating video... (this may take a minute)');
+      
+      let currentOp = operation;
+      while (!currentOp.done) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        currentOp = await (ai.operations as any).get({ name: (currentOp as any).name });
+        setVideoProgress('Still processing... hang tight!');
+      }
+
+      if (currentOp.response?.generatedVideos?.[0]?.video?.videoBytes) {
+        const videoBase64 = currentOp.response.generatedVideos[0].video.videoBytes;
+        setVideoUrl(`data:video/mp4;base64,${videoBase64}`);
+      } else {
+        throw new Error("Video generation completed but no video data was returned.");
+      }
+    } catch (err: any) {
+      console.error("Video generation failed:", err);
+      setError(err.message || "Failed to generate video. Veo might be unavailable for your key.");
+    } finally {
+      setIsGeneratingVideo(false);
+      setVideoProgress('');
+    }
+  };
+
   const generateAIContent = async (platform?: Platform) => {
-    if (!topic.trim()) return;
+    if (!topic.trim()) {
+      setError("Please enter a topic first!");
+      return;
+    }
     setIsGenerating(true);
     setError(null);
     try {
@@ -195,25 +500,53 @@ export default function App() {
       Provide a catchy title, a detailed description, and a list of 5-10 relevant hashtags. 
       Return the result in JSON format.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: GeminiType.OBJECT,
-            properties: {
-              title: { type: GeminiType.STRING },
-              description: { type: GeminiType.STRING },
-              hashtags: { 
-                type: GeminiType.ARRAY,
-                items: { type: GeminiType.STRING }
-              }
-            },
-            required: ["title", "description", "hashtags"]
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: GeminiType.OBJECT,
+              properties: {
+                title: { type: GeminiType.STRING },
+                description: { type: GeminiType.STRING },
+                hashtags: { 
+                  type: GeminiType.ARRAY,
+                  items: { type: GeminiType.STRING }
+                }
+              },
+              required: ["title", "description", "hashtags"]
+            }
           }
+        });
+      } catch (e: any) {
+        if (e.message?.includes('not found') || e.message?.includes('404')) {
+          // Fallback to Gemini 2.0 Flash Experimental which is widely available
+          response = await ai.models.generateContent({
+            model: "gemini-2.0-flash-exp",
+            contents: prompt,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: GeminiType.OBJECT,
+                properties: {
+                  title: { type: GeminiType.STRING },
+                  description: { type: GeminiType.STRING },
+                  hashtags: { 
+                    type: GeminiType.ARRAY,
+                    items: { type: GeminiType.STRING }
+                  }
+                },
+                required: ["title", "description", "hashtags"]
+              }
+            }
+          });
+        } else {
+          throw e;
         }
-      });
+      }
 
       const result = JSON.parse(response.text);
       const formattedTags = result.hashtags.map((tag: string) => tag.startsWith('#') ? tag : `#${tag}`);
@@ -332,62 +665,311 @@ export default function App() {
 
   const activeConfig = PLATFORMS.find(p => p.id === activePlatform)!;
 
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#F5F5F5] flex items-center justify-center p-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white p-12 rounded-[32px] shadow-2xl shadow-blue-500/10 max-w-md w-full text-center space-y-8"
+        >
+          <div className="mx-auto w-fit shadow-xl shadow-blue-500/30 rounded-3xl overflow-hidden">
+            <Logo className="w-24 h-24" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-3xl font-bold tracking-tight">A3M Social Post Creator</h1>
+            <p className="text-gray-500">Sign in to start creating viral content</p>
+          </div>
+          <button 
+            onClick={handleLogin}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-2xl font-bold transition-all active:scale-95 flex items-center justify-center gap-3 shadow-lg shadow-blue-500/20"
+          >
+            <div className="bg-white p-1 rounded-lg">
+              <img src="https://www.google.com/favicon.ico" className="w-4 h-4" alt="Google" />
+            </div>
+            Sign in with Google
+          </button>
+          <p className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Secure Authentication by Firebase</p>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F5F5F5] text-[#1A1A1A] font-sans selection:bg-blue-100">
-      {/* Error Banner */}
+      {/* Admin Panel Overlay */}
       <AnimatePresence>
-        {error && (
+        {showAdminPanel && userProfile?.role === 'admin' && (
           <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="bg-red-600 text-white px-6 py-4 sticky top-0 z-50 shadow-lg"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
           >
-            <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="bg-white/20 p-1.5 rounded-full shrink-0">
-                  <X className="w-4 h-4" />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="bg-red-600 p-2 rounded-xl">
+                    <ShieldCheck className="text-white w-5 h-5" />
+                  </div>
+                  <h2 className="text-xl font-bold">Admin Dashboard</h2>
                 </div>
-                <div>
-                  <p className="text-sm font-bold">API Key Required</p>
-                  <p className="text-xs opacity-90">To use AI features, please provide your Gemini API Key.</p>
-                </div>
+                <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
               </div>
               
-              <div className="flex items-center gap-2 w-full md:w-auto">
-                <input 
-                  type="password"
-                  placeholder="Paste your API Key here..."
-                  className="flex-1 md:w-64 px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-sm placeholder:text-white/40 outline-none focus:bg-white/20 transition-all"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      saveApiKey((e.target as HTMLInputElement).value);
-                      (e.target as HTMLInputElement).value = '';
-                    }
-                  }}
-                />
-                <a 
-                  href="https://aistudio.google.com/app/apikey" 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="text-[10px] font-bold uppercase tracking-widest bg-white text-red-600 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
-                >
-                  Get Key
-                </a>
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                      <Users className="w-4 h-4" /> User Management ({allUsers.length})
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1 md:w-64">
+                        <input 
+                          type="text"
+                          placeholder="Search users..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          className="w-full pl-4 pr-4 py-2 bg-gray-100 border border-transparent focus:border-blue-500 rounded-xl text-sm outline-none transition-all"
+                        />
+                      </div>
+                      <button 
+                        onClick={() => setShowAddUser(!showAddUser)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all active:scale-95"
+                      >
+                        <Plus className="w-4 h-4" /> Add User
+                      </button>
+                    </div>
+                  </div>
+
+                  {showAddUser && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      className="bg-gray-50 p-4 rounded-2xl border border-gray-100 space-y-4"
+                    >
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="md:col-span-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 mb-1 block">Email Address</label>
+                          <input 
+                            type="email"
+                            value={newUserEmail}
+                            onChange={(e) => setNewUserEmail(e.target.value)}
+                            placeholder="user@example.com"
+                            className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none focus:border-blue-500 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold uppercase text-gray-400 mb-1 block">Initial Role</label>
+                          <select 
+                            value={newUserRole}
+                            onChange={(e) => setNewUserRole(e.target.value as any)}
+                            className="w-full px-4 py-2 rounded-xl border border-gray-200 outline-none focus:border-blue-500 text-sm bg-white"
+                          >
+                            <option value="user">User</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="flex justify-end gap-2">
+                        <button onClick={() => setShowAddUser(false)} className="px-4 py-2 text-sm font-bold text-gray-500 hover:text-gray-700">Cancel</button>
+                        <button onClick={handleAddUser} className="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-bold">Create User</button>
+                      </div>
+                    </motion.div>
+                  )}
+                  
+                  <div className="border border-gray-100 rounded-2xl overflow-hidden bg-white">
+                    <table className="w-full text-left">
+                      <thead className="bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                        <tr>
+                          <th className="px-6 py-4">User Details</th>
+                          <th className="px-6 py-4">Role</th>
+                          <th className="px-6 py-4">Last Active</th>
+                          <th className="px-6 py-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {allUsers
+                          .filter(u => u.email?.toLowerCase().includes(searchQuery.toLowerCase()))
+                          .map((u) => (
+                          <tr key={u.id} className="hover:bg-gray-50/50 transition-colors">
+                            <td className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-400">
+                                  <User className="w-4 h-4" />
+                                </div>
+                                <div className="flex flex-col">
+                                  <span className="text-sm font-bold flex items-center gap-2">
+                                    {u.email}
+                                    {u.isInvited && <span className="text-[8px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">Invited</span>}
+                                  </span>
+                                  <span className="text-[10px] text-gray-400 font-mono truncate max-w-[150px]">{u.uid || u.id}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
+                              <select 
+                                value={u.role}
+                                onChange={(e) => updateUserRole(u.id, e.target.value)}
+                                className={`text-xs font-bold border rounded-lg px-2 py-1 outline-none transition-colors ${
+                                  u.role === 'admin' ? 'border-red-200 text-red-600 bg-red-50' : 'border-gray-200 text-gray-600 bg-white'
+                                }`}
+                              >
+                                <option value="user">User</option>
+                                <option value="admin">Admin</option>
+                              </select>
+                            </td>
+                            <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-gray-500">
+                                  {u.lastLogin ? new Date(u.lastLogin.seconds * 1000).toLocaleDateString() : 'Never'}
+                                </span>
+                                <span className="text-[10px] text-gray-400">
+                                  {u.lastLogin ? new Date(u.lastLogin.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-right">
+                              {u.uid !== user?.uid && (
+                                <button 
+                                  onClick={() => deleteUser(u.id)}
+                                  className="text-gray-400 hover:text-red-600 p-2 transition-colors rounded-lg hover:bg-red-50"
+                                  title="Delete User"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* User Settings Overlay */}
+      <AnimatePresence>
+        {showUserPanel && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="bg-blue-600 p-2 rounded-xl">
+                    <Settings className="text-white w-5 h-5" />
+                  </div>
+                  <h2 className="text-xl font-bold">User Settings</h2>
+                </div>
+                <button onClick={() => setShowUserPanel(false)} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              
+              <div className="p-8 space-y-8">
+                <div className="space-y-4">
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                    <Key className="w-4 h-4" /> Gemini API Configuration
+                  </h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">
+                    Enter your personal Gemini API key to enable AI features. This key is stored securely in your private profile.
+                  </p>
+                  <div className="space-y-4">
+                    <input 
+                      id="api-key-input"
+                      type="password"
+                      defaultValue={userProfile?.geminiApiKey || ''}
+                      placeholder="Paste your API key here..."
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          saveUserApiKey((e.target as HTMLInputElement).value);
+                        }
+                      }}
+                    />
+                    <div className="flex gap-3">
+                      <button 
+                        id="save-key-btn"
+                        onClick={() => {
+                          const input = document.getElementById('api-key-input') as HTMLInputElement;
+                          saveUserApiKey(input.value);
+                        }}
+                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-all active:scale-95"
+                      >
+                        Save API Key
+                      </button>
+                      <button 
+                        onClick={clearUserApiKey}
+                        className="px-4 bg-gray-100 hover:bg-gray-200 text-gray-600 py-3 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center"
+                        title="Clear Key"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-gray-100">
+                  <button 
+                    onClick={handleLogout}
+                    className="w-full flex items-center justify-center gap-2 text-red-500 hover:text-red-700 font-bold transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" /> Sign Out
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Error Banner */}
+      {error && (
+        <div className="bg-red-600 text-white px-6 py-4 sticky top-0 z-[80] shadow-lg flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5" />
+            <p className="text-sm font-medium">{error}</p>
+          </div>
+          <button onClick={() => setError(null)} className="p-1 hover:bg-white/20 rounded-lg transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center gap-4 justify-between">
           <div className="flex items-center gap-3 shrink-0">
-            <div className="bg-blue-600 p-2 rounded-xl">
-              <Share2 className="text-white w-6 h-6" />
-            </div>
-            <h1 className="text-xl font-bold tracking-tight hidden sm:block">SocialPost Studio</h1>
+            <Logo className="w-10 h-10" />
+            <h1 className="text-xl font-bold tracking-tight hidden sm:block">A3M Social Post Creator v1.2</h1>
           </div>
 
           <div className="flex-1 max-w-xl w-full flex items-center gap-2">
@@ -396,7 +978,10 @@ export default function App() {
               <input 
                 type="text"
                 value={topic}
-                onChange={(e) => setTopic(e.target.value)}
+                onChange={(e) => {
+                  setTopic(e.target.value);
+                  if (error && e.target.value.length > 0) setError(null);
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && generateAIContent()}
                 placeholder="Enter your topic (e.g. New coffee shop)..."
                 className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all text-sm"
@@ -405,27 +990,32 @@ export default function App() {
             <button 
               onClick={() => generateAIContent()}
               disabled={isGenerating || !topic.trim()}
-              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-xl font-bold transition-all shadow-sm flex items-center gap-2 active:scale-95 text-sm shrink-0"
+              className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white px-6 py-2 rounded-xl text-sm font-bold transition-all active:scale-95 flex items-center gap-2 shadow-lg shadow-blue-500/20"
             >
               {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {isGenerating ? 'Creating...' : 'Create Post'}
             </button>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
+            {userProfile?.role === 'admin' && (
+              <button 
+                onClick={() => setShowAdminPanel(true)}
+                className="p-2 hover:bg-gray-100 rounded-xl transition-colors text-gray-600 relative group"
+                title="Admin Dashboard"
+              >
+                <ShieldCheck className="w-6 h-6" />
+                <span className="absolute -top-1 -right-1 bg-red-600 w-2 h-2 rounded-full" />
+              </button>
+            )}
             <button 
-              onClick={handleCopyAll}
-              className="hidden lg:flex items-center gap-2 text-gray-500 hover:text-blue-600 px-3 py-2 rounded-lg font-medium transition-all text-sm"
+              onClick={() => setShowUserPanel(true)}
+              className="flex items-center gap-2 p-1 pr-3 hover:bg-gray-100 rounded-full transition-all border border-transparent hover:border-gray-200"
             >
-              <Copy className="w-4 h-4" />
-              Copy All
-            </button>
-            <button 
-              onClick={() => handleCopy()}
-              className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-all active:scale-95 text-sm"
-            >
-              {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-              {copied ? 'Copied!' : 'Copy Active'}
+              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-xs overflow-hidden">
+                {user?.photoURL ? <img src={user.photoURL} alt="Profile" /> : <User className="w-4 h-4" />}
+              </div>
+              <span className="text-xs font-bold hidden md:inline">{user?.displayName || user?.email?.split('@')[0]}</span>
             </button>
           </div>
         </div>
@@ -596,12 +1186,21 @@ export default function App() {
               <div className="flex items-center gap-3">
                 <button 
                   onClick={generateThumbnail}
-                  disabled={isGeneratingThumbnail || (!topic.trim() && !getDisplayValue('title', activePlatform))}
+                  disabled={isGeneratingThumbnail || isGeneratingVideo || (!topic.trim() && !getDisplayValue('title', activePlatform))}
                   className="text-blue-600 hover:text-blue-700 p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest disabled:opacity-50"
                   title={`Generate ${activeConfig.name} Thumbnail`}
                 >
                   {isGeneratingThumbnail ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ImageIcon className="w-3.5 h-3.5" />}
                   Thumbnail
+                </button>
+                <button 
+                  onClick={generateVideo}
+                  disabled={isGeneratingVideo || isGeneratingThumbnail || (!topic.trim() && !getDisplayValue('title', activePlatform))}
+                  className="text-purple-600 hover:text-purple-700 p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest disabled:opacity-50"
+                  title={`Generate ${activeConfig.name} Video`}
+                >
+                  {isGeneratingVideo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Video className="w-3.5 h-3.5" />}
+                  Video
                 </button>
                 <button 
                   onClick={() => generateAIContent(activePlatform)}
@@ -804,29 +1403,34 @@ export default function App() {
         {/* Right Column: Platform Selector & Preview */}
         <div className="lg:col-span-5 space-y-6">
           {/* Platform Selector */}
-          <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200 flex flex-wrap gap-1">
+          <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200 flex flex-wrap gap-2">
             {PLATFORMS.map((p) => {
               const Icon = p.icon;
               const isActive = activePlatform === p.id;
+              const brandColor = p.color.replace('bg-', 'text-');
+              const brandBgLight = p.color.replace('bg-', 'bg-').replace('-600', '-50').replace('-700', '-50').replace('-900', '-50').replace('bg-black', 'bg-gray-100');
+              
               return (
                 <button
                   key={p.id}
                   onClick={() => setActivePlatform(p.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all relative ${
+                  className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all relative group ${
                     isActive 
                       ? 'text-white' 
-                      : 'text-gray-500 hover:bg-gray-50'
+                      : `text-gray-500 hover:${brandBgLight} ${brandColor.replace('text-', 'hover:text-')}`
                   }`}
                 >
                   {isActive && (
                     <motion.div 
                       layoutId="active-pill"
-                      className={`absolute inset-0 rounded-xl ${p.color}`}
+                      className={`absolute inset-0 rounded-xl ${p.color} shadow-lg shadow-${p.color.split('-')[1]}-500/20`}
                       transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                     />
                   )}
-                  <Icon className={`w-5 h-5 relative z-10 ${isActive ? 'text-white' : ''}`} />
-                  <span className="text-sm font-semibold relative z-10 hidden sm:inline">{p.name}</span>
+                  <div className="relative z-10 flex items-center gap-2">
+                    <Icon className={`w-5 h-5 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : brandColor}`} />
+                    <span className="text-sm font-bold hidden sm:inline">{p.name}</span>
+                  </div>
                 </button>
               );
             })}
@@ -836,11 +1440,19 @@ export default function App() {
           <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden sticky top-24">
             <div className={`h-2 ${activeConfig.color}`} />
             
-            {/* Thumbnail Area */}
+            {/* Media Area */}
             <div className={`bg-gray-100 relative group overflow-hidden ${
               activePlatform === 'tiktok' || activePlatform === 'instagram' ? 'aspect-[9/16] max-h-[400px]' : 'aspect-video'
             }`}>
-              {thumbnailUrl ? (
+              {videoUrl ? (
+                <video 
+                  src={videoUrl} 
+                  controls 
+                  className="w-full h-full object-cover"
+                  autoPlay
+                  loop
+                />
+              ) : thumbnailUrl ? (
                 <img 
                   src={thumbnailUrl} 
                   alt="Post Thumbnail" 
@@ -849,44 +1461,57 @@ export default function App() {
                 />
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 p-6 text-center">
-                  <ImageIcon className="w-12 h-12 mb-2 opacity-20" />
-                  <p className="text-xs font-medium">No thumbnail generated yet</p>
-                  <button 
-                    onClick={generateThumbnail}
-                    disabled={isGeneratingThumbnail || (!topic.trim() && !getDisplayValue('title', activePlatform))}
-                    className="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg transition-all active:scale-95 disabled:bg-gray-300 flex items-center gap-2"
-                  >
-                    {isGeneratingThumbnail ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
-                    {isGeneratingThumbnail ? 'Designing...' : 'Create Thumbnail'}
-                  </button>
+                  <div className="bg-gray-50 p-4 rounded-full mb-4">
+                    <ImageIcon className="w-8 h-8 opacity-20" />
+                  </div>
+                  <p className="text-xs font-medium">No media generated yet</p>
+                  <div className="mt-4 flex flex-col gap-2 w-full max-w-[200px]">
+                    <button 
+                      onClick={generateThumbnail}
+                      disabled={isGeneratingThumbnail || isGeneratingVideo || (!topic.trim() && !getDisplayValue('title', activePlatform))}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2"
+                    >
+                      {isGeneratingThumbnail ? <Loader2 className="w-4 h-4 animate-spin" /> : <ImageIcon className="w-4 h-4" />}
+                      {isGeneratingThumbnail ? 'Designing...' : 'Create Thumbnail'}
+                    </button>
+                    <button 
+                      onClick={generateVideo}
+                      disabled={isGeneratingVideo || isGeneratingThumbnail || (!topic.trim() && !getDisplayValue('title', activePlatform))}
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-widest shadow-lg transition-all active:scale-95 disabled:bg-gray-300 flex items-center justify-center gap-2"
+                    >
+                      {isGeneratingVideo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Video className="w-4 h-4" />}
+                      {isGeneratingVideo ? 'Processing...' : 'Create Video'}
+                    </button>
+                  </div>
                 </div>
               )}
               
-              {isGeneratingThumbnail && (
-                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center text-blue-600">
+              {(isGeneratingThumbnail || isGeneratingVideo) && (
+                <div className="absolute inset-0 bg-white/60 backdrop-blur-sm flex flex-col items-center justify-center text-blue-600 z-20">
                   <Loader2 className="w-8 h-8 animate-spin mb-2" />
-                  <p className="text-xs font-bold uppercase tracking-widest">Designing...</p>
+                  <p className="text-xs font-bold uppercase tracking-widest">{isGeneratingVideo ? 'Generating Video...' : 'Designing...'}</p>
+                  {isGeneratingVideo && <p className="text-[10px] text-gray-500 mt-1">{videoProgress}</p>}
                 </div>
               )}
 
-              {thumbnailUrl && !isGeneratingThumbnail && (
-                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+              {(thumbnailUrl || videoUrl) && !isGeneratingThumbnail && !isGeneratingVideo && (
+                <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
                   <button 
                     onClick={() => {
                       const link = document.createElement('a');
-                      link.href = thumbnailUrl;
-                      link.download = `thumbnail-${activePlatform}.png`;
+                      link.href = (videoUrl || thumbnailUrl)!;
+                      link.download = videoUrl ? `promo-${activePlatform}.mp4` : `thumbnail-${activePlatform}.png`;
                       link.click();
                     }}
                     className="bg-white/90 p-2 rounded-lg shadow-sm hover:bg-white text-gray-700"
-                    title="Download Thumbnail"
+                    title="Download Media"
                   >
                     <Download className="w-4 h-4" />
                   </button>
                   <button 
-                    onClick={generateThumbnail}
+                    onClick={videoUrl ? generateVideo : generateThumbnail}
                     className="bg-white/90 p-2 rounded-lg shadow-sm hover:bg-white text-gray-700"
-                    title="Refresh Thumbnail"
+                    title="Refresh Media"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
@@ -1055,7 +1680,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="max-w-6xl mx-auto p-6 text-center text-gray-400 text-sm">
-        <p>© 2026 SocialPost Studio • Built for creators</p>
+        <p>© 2026 A3M Social Post Creator • Built for creators</p>
       </footer>
     </div>
   );
