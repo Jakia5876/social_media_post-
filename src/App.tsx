@@ -95,6 +95,26 @@ export default function App() {
   const [userImage, setUserImage] = useState<string | null>(null);
   const [thumbnailStyle, setThumbnailStyle] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [localApiKey, setLocalApiKey] = useState(localStorage.getItem('GEMINI_API_KEY') || '');
+
+  const getAI = () => {
+    const apiKey = process.env.GEMINI_API_KEY || localApiKey;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY is not set. Please add it to your environment variables or enter it below.');
+    }
+    return new GoogleGenAI({ apiKey });
+  };
+
+  const saveApiKey = (key: string) => {
+    const trimmedKey = key.trim();
+    setLocalApiKey(trimmedKey);
+    if (trimmedKey) {
+      localStorage.setItem('GEMINI_API_KEY', trimmedKey);
+      setError(null);
+    } else {
+      localStorage.removeItem('GEMINI_API_KEY');
+    }
+  };
 
   const handleImageUpload = (e: any) => {
     const file = e.target.files?.[0];
@@ -321,20 +341,41 @@ export default function App() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="bg-red-600 text-white px-6 py-3 flex items-center justify-between sticky top-0 z-50 shadow-lg"
+            className="bg-red-600 text-white px-6 py-4 sticky top-0 z-50 shadow-lg"
           >
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-1 rounded-full">
-                <X className="w-4 h-4" />
+            <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-white/20 p-1.5 rounded-full shrink-0">
+                  <X className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">API Key Required</p>
+                  <p className="text-xs opacity-90">To use AI features, please provide your Gemini API Key.</p>
+                </div>
               </div>
-              <p className="text-sm font-medium">{error}</p>
+              
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <input 
+                  type="password"
+                  placeholder="Paste your API Key here..."
+                  className="flex-1 md:w-64 px-3 py-1.5 bg-white/10 border border-white/20 rounded-lg text-sm placeholder:text-white/40 outline-none focus:bg-white/20 transition-all"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      saveApiKey((e.target as HTMLInputElement).value);
+                      (e.target as HTMLInputElement).value = '';
+                    }
+                  }}
+                />
+                <a 
+                  href="https://aistudio.google.com/app/apikey" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-[10px] font-bold uppercase tracking-widest bg-white text-red-600 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
+                >
+                  Get Key
+                </a>
+              </div>
             </div>
-            <button 
-              onClick={() => setError(null)}
-              className="text-white/60 hover:text-white transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </motion.div>
         )}
       </AnimatePresence>
