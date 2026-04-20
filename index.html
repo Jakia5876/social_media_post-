@@ -3,7 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>A3M Social Post Creator - V1.3</title>
+    <script>
+      (function() {
+        // Force window.fetch to be writable as early as possible
+        try {
+          var target = typeof globalThis !== 'undefined' ? globalThis : (typeof window !== 'undefined' ? window : null);
+          if (target) {
+            Object.defineProperty(target, 'fetch', {
+              value: target.fetch,
+              writable: true,
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (e) {
+          console.warn('Fetch fix error:', e);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
