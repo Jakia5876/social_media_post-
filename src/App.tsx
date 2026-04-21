@@ -159,8 +159,6 @@ const TRANSLATIONS = {
     confirmClearKey: "আপনি কি নিশ্চিত যে আপনি আপনার এপিআই কী-টি মুছতে চান? অ্যাপটি ডিফল্ট কী-তে ফিরে যাবে।",
     apiKeyMissing: "এপিআই কী নেই। অনুগ্রহ করে আপনার ইউজার সেটিংসে এটি সেট করুন।",
     thumbnailFailed: "থাম্বনেইল তৈরি করতে ব্যর্থ হয়েছে। অনুগ্রহ করে আপনার এপিআই কী চেক করুন।",
-    deleteUserFailed: "ইউজার মুছতে ব্যর্থ হয়েছে: ",
-    addUserFailed: "ইউজার যোগ করতে ব্যর্থ হয়েছে: ",
     platforms: {
       youtube: { placeholder: "ভিডিওর শিরোনাম এবং বর্ণনা..." },
       tiktok: { placeholder: "ছোট এবং আকর্ষণীয় ক্যাপশন..." },
@@ -788,7 +786,7 @@ export default function App() {
             <div className="flex flex-col">
               <h1 className="text-2xl font-black tracking-tighter text-gray-900">{t.appName}</h1>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">v1.3.1</span>
+                <span className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">v1.3.2</span>
                 <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase tracking-tighter italic">Public Mode</span>
               </div>
             </div>
