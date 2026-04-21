@@ -767,7 +767,7 @@ export default function App() {
 
       {/* Error Banner */}
       {error && (
-        <div className="bg-red-600 text-white px-6 py-4 sticky top-0 z-[80] shadow-lg flex items-center justify-between gap-4">
+        <div className="bg-red-600 text-white px-4 md:px-6 py-3 md:py-4 sticky top-0 z-[80] shadow-lg flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5" />
             <p className="text-sm font-medium">{error}</p>
@@ -779,30 +779,30 @@ export default function App() {
       )}
 
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-8 py-6 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row items-center gap-8 justify-between">
-          <div className="flex items-center gap-4 shrink-0">
-            <Logo className="w-12 h-12" />
+      <header className="bg-white border-b border-gray-200 px-4 md:px-8 py-4 md:py-6 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-center gap-4 md:gap-8 justify-between">
+          <div className="flex items-center gap-3 md:gap-4 shrink-0 w-full md:w-auto">
+            <Logo className="w-10 h-10 md:w-12 md:h-12" />
             <div className="flex flex-col">
-              <h1 className="text-2xl font-black tracking-tighter text-gray-900">{t.appName}</h1>
+              <h1 className="text-xl md:text-2xl font-black tracking-tighter text-gray-900">{t.appName}</h1>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold text-blue-600 tracking-widest uppercase">v1.3.2</span>
+                <span className="text-[9px] md:text-[10px] font-bold text-blue-600 tracking-widest uppercase">v1.3.2</span>
                 <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase tracking-tighter italic">Public Mode</span>
               </div>
             </div>
           </div>
 
-          <div className="flex-1 w-full flex flex-col gap-3">
-            <div className="flex items-center gap-3 px-6">
-              <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              <span className="text-[12px] font-black uppercase tracking-[0.3em] text-blue-700">
+          <div className="flex-1 w-full flex flex-col gap-2 md:gap-3">
+            <div className="flex items-center gap-3 px-2 md:px-6">
+              <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-blue-500 animate-pulse" />
+              <span className="text-[10px] md:text-[12px] font-black uppercase tracking-[0.2em] md:tracking-[0.3em] text-blue-700">
                 {language === 'bn' ? 'আপনার আইডিয়া এখানে লিখুন' : 'DESCRIBE YOUR IDEA BELOW'}
               </span>
             </div>
-            <div className="flex items-center gap-4">
-              <div className="relative flex-1 group">
+            <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4">
+              <div className="relative flex-1 w-full group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-full blur opacity-20 group-focus-within:opacity-40 transition duration-1000 group-focus-within:duration-200" />
-                <Lightbulb className="absolute left-8 top-1/2 -translate-y-1/2 w-7 h-7 text-blue-600 z-10" />
+                <Lightbulb className="absolute left-6 md:left-8 top-1/2 -translate-y-1/2 w-5 h-5 md:w-7 md:h-7 text-blue-600 z-10" />
                 <input 
                   type="text"
                   value={topic}
@@ -812,21 +812,21 @@ export default function App() {
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && generateAIContent()}
                   placeholder={t.enterTopic}
-                  className="relative w-full pl-20 pr-8 py-6 bg-white border-2 border-blue-200 rounded-full focus:ring-0 focus:border-blue-600 outline-none transition-all text-xl font-bold shadow-2xl shadow-blue-500/10 placeholder:text-gray-400 z-10"
+                  className="relative w-full pl-14 md:pl-20 pr-6 md:pr-8 py-4 md:py-6 bg-white border-2 border-blue-200 rounded-full focus:ring-0 focus:border-blue-600 outline-none transition-all text-base md:text-xl font-bold shadow-2xl shadow-blue-500/10 placeholder:text-gray-400 z-10"
                 />
               </div>
               <button 
                 onClick={() => generateAIContent()}
                 disabled={isGenerating || !topic.trim()}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white px-12 py-6 rounded-full text-lg font-black transition-all active:scale-95 flex items-center gap-4 shadow-2xl shadow-blue-600/40 hover:shadow-blue-600/60 z-10 group"
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white px-8 md:px-12 py-4 md:py-6 rounded-full text-base md:text-lg font-black transition-all active:scale-95 flex items-center justify-center gap-3 md:gap-4 shadow-2xl shadow-blue-600/40 hover:shadow-blue-600/60 z-10 group"
               >
-                {isGenerating ? <Loader2 className="w-7 h-7 animate-spin" /> : <Sparkles className="w-7 h-7 group-hover:rotate-12 transition-transform" />}
+                {isGenerating ? <Loader2 className="w-6 h-6 md:w-7 md:h-7 animate-spin" /> : <Sparkles className="w-6 h-6 md:w-7 md:h-7 group-hover:rotate-12 transition-transform" />}
                 <span className="whitespace-nowrap">{isGenerating ? t.creating : t.createPost}</span>
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
             {/* Language Switcher */}
             <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
               <button 
@@ -854,7 +854,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="max-w-6xl mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8">
         {/* Left Column: Global & Platform Controls */}
         <div className="lg:col-span-7 space-y-8">
           {/* Global Content Section */}
@@ -889,7 +889,7 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-4 md:p-6 space-y-6">
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
@@ -1058,7 +1058,7 @@ export default function App() {
               </div>
             </div>
             
-            <div className="p-6 space-y-6">
+            <div className="p-4 md:p-6 space-y-6">
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-medium text-gray-700">{t.platformTitle}</label>
@@ -1236,7 +1236,7 @@ export default function App() {
         {/* Right Column: Platform Selector & Preview */}
         <div className="lg:col-span-5 space-y-6">
           {/* Platform Selector */}
-          <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200 flex flex-wrap gap-2">
+          <div className="bg-white p-2 rounded-2xl shadow-sm border border-gray-200 grid grid-cols-2 min-[400px]:grid-cols-3 sm:flex sm:flex-wrap gap-2">
             {PLATFORMS.map((p) => {
               const Icon = p.icon;
               const isActive = activePlatform === p.id;
@@ -1247,7 +1247,7 @@ export default function App() {
                 <button
                   key={p.id}
                   onClick={() => setActivePlatform(p.id)}
-                  className={`flex-1 min-w-[100px] flex items-center justify-center gap-2 py-3 px-4 rounded-xl transition-all relative group ${
+                  className={`flex items-center justify-center gap-2 py-3 px-2 sm:px-4 rounded-xl transition-all relative group sm:flex-1 ${
                     isActive 
                       ? 'text-white' 
                       : `text-gray-500 hover:${brandBgLight} ${brandColor.replace('text-', 'hover:text-')}`
@@ -1270,7 +1270,7 @@ export default function App() {
           </div>
 
           {/* Preview Card */}
-          <div className="bg-white rounded-3xl shadow-xl border border-gray-200 overflow-hidden sticky top-24">
+          <div className="bg-white rounded-2xl md:rounded-3xl shadow-xl border border-gray-200 overflow-hidden lg:sticky lg:top-24">
             <div className={`h-2 ${activeConfig.color}`} />
             
             {/* Media Area */}
@@ -1352,7 +1352,7 @@ export default function App() {
               )}
             </div>
 
-            <div className="p-8 space-y-6">
+            <div className="p-4 md:p-8 space-y-6">
               {/* Thumbnail Customization Tools */}
               <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100 space-y-4">
                 <div className="flex items-center justify-between">
@@ -1512,7 +1512,7 @@ export default function App() {
       </main>
 
       {/* Footer */}
-      <footer className="max-w-6xl mx-auto p-6 text-center text-gray-400 text-sm">
+      <footer className="max-w-6xl mx-auto p-4 md:p-6 text-center text-gray-400 text-sm">
         <p>© ২০২৬ {t.appName} • {t.builtForCreators}</p>
       </footer>
     </div>
