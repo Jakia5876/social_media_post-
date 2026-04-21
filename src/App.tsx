@@ -59,7 +59,7 @@ type Language = 'en' | 'bn';
 const TRANSLATIONS = {
   en: {
     appName: "A3M Social Post Creator",
-    enterTopic: "Enter your topic (e.g. New Product Launch, Travel Vlog...)",
+    enterTopic: "Topic (Travel, Gaming, etc.)",
     createPost: "Create Post",
     creating: "Creating...",
     globalContent: "Global Content",
@@ -117,7 +117,7 @@ const TRANSLATIONS = {
   },
   bn: {
     appName: "A3M সোশ্যাল পোস্ট ক্রিয়েটর",
-    enterTopic: "আপনার বিষয় লিখুন (যেমন: নতুন প্রোডাক্ট লঞ্চ, ট্রাভেল ব্লগ...)",
+    enterTopic: "বিষয় (গেম, ব্লগ, ইত্যাদি)",
     createPost: "পোস্ট তৈরি করুন",
     creating: "তৈরি হচ্ছে...",
     globalContent: "গ্লোবাল কন্টেন্ট",
@@ -780,8 +780,8 @@ export default function App() {
 
       {/* Header */}
       <header className="bg-white border-b border-gray-200 px-4 md:px-8 py-4 md:py-6 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-center gap-4 md:gap-8 justify-between">
-          <div className="flex items-center gap-3 md:gap-4 shrink-0 w-full md:w-auto">
+        <div className="max-w-[1400px] mx-auto flex flex-col lg:flex-row items-center gap-4 md:gap-8 justify-between">
+          <div className="flex items-center gap-3 md:gap-4 shrink-0 w-full lg:w-auto">
             <Logo className="w-10 h-10 md:w-12 md:h-12" />
             <div className="flex flex-col">
               <h1 className="text-xl md:text-2xl font-black tracking-tighter text-gray-900">{t.appName}</h1>
@@ -802,7 +802,7 @@ export default function App() {
             <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4">
               <div className="relative flex-1 w-full group">
                 <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-cyan-500 rounded-full blur opacity-20 group-focus-within:opacity-40 transition duration-1000 group-focus-within:duration-200" />
-                <Lightbulb className="absolute left-6 md:left-8 top-1/2 -translate-y-1/2 w-5 h-5 md:w-7 md:h-7 text-blue-600 z-10" />
+                <Lightbulb className="absolute left-4 md:left-8 top-1/2 -translate-y-1/2 w-5 h-5 md:w-7 md:h-7 text-blue-600 z-10" />
                 <input 
                   type="text"
                   value={topic}
@@ -812,13 +812,13 @@ export default function App() {
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && generateAIContent()}
                   placeholder={t.enterTopic}
-                  className="relative w-full pl-14 md:pl-20 pr-6 md:pr-8 py-4 md:py-6 bg-white border-2 border-blue-200 rounded-full focus:ring-0 focus:border-blue-600 outline-none transition-all text-base md:text-xl font-bold shadow-2xl shadow-blue-500/10 placeholder:text-gray-400 z-10"
+                  className="relative w-full pl-10 lg:pl-20 pr-4 lg:pr-8 py-4 md:py-6 bg-white border-2 border-blue-200 rounded-full focus:ring-0 focus:border-blue-600 outline-none transition-all text-sm lg:text-xl font-medium lg:font-bold shadow-2xl shadow-blue-500/10 placeholder:text-gray-400 z-10"
                 />
               </div>
               <button 
                 onClick={() => generateAIContent()}
                 disabled={isGenerating || !topic.trim()}
-                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white px-8 md:px-12 py-4 md:py-6 rounded-full text-base md:text-lg font-black transition-all active:scale-95 flex items-center justify-center gap-3 md:gap-4 shadow-2xl shadow-blue-600/40 hover:shadow-blue-600/60 z-10 group"
+                className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 text-white px-8 lg:px-12 py-4 md:py-6 rounded-full text-base lg:text-lg font-black transition-all active:scale-95 flex items-center justify-center gap-3 md:gap-4 shadow-2xl shadow-blue-600/40 hover:shadow-blue-600/60 z-10 group"
               >
                 {isGenerating ? <Loader2 className="w-6 h-6 md:w-7 md:h-7 animate-spin" /> : <Sparkles className="w-6 h-6 md:w-7 md:h-7 group-hover:rotate-12 transition-transform" />}
                 <span className="whitespace-nowrap">{isGenerating ? t.creating : t.createPost}</span>
@@ -826,7 +826,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0 self-end md:self-center">
+          <div className="flex items-center gap-3 shrink-0 self-end lg:self-center">
             {/* Language Switcher */}
             <div className="flex bg-gray-100 p-1 rounded-xl border border-gray-200">
               <button 
