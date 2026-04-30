@@ -343,18 +343,44 @@ export default function App() {
   };
 
   const getAI = () => {
-    // Priority: Local Storage > Environment Variable > Hardcoded Fallback
-    let apiKey = localApiKey || process.env.GEMINI_API_KEY || 'AIzaSyD9iT9fqca95AegcowEu1bYoSsjgPZ59gY';
+    // Priority: Local Storage > Environment Variable
+    let apiKey = localApiKey || process.env.GEMINI_API_KEY;
     
     // Clean up key if it's accidentally set to "undefined" or "null" as strings
     if (apiKey === 'undefined' || apiKey === 'null' || !apiKey) {
-      apiKey = 'AIzaSyD9iT9fqca95AegcowEu1bYoSsjgPZ59gY';
+      apiKey = '';
     }
 
     if (!apiKey || apiKey.length < 10) {
-      throw new Error('এপিআই কী নেই। অনুগ্রহ করে আপনার ইউজার সেটিংসে এটি সেট করুন।');
+      throw new Error('API_KEY_MISSING');
     }
     return new GoogleGenAI({ apiKey });
+  };
+
+  const handleGeminiError = (err: any, fallbackMessage: string) => {
+    console.error("Gemini Error:", err);
+    let message = err.message || fallbackMessage;
+    
+    if (message.includes('429') || message.includes('quota') || message.includes('exhausted')) {
+      message = language === 'bn' 
+        ? "কোটা সীমাবদ্ধতা: আপনি ফ্রি টিয়ারের সীমা অতিক্রম করেছেন। অনুগ্রহ করে আপনার নিজস্ব এপিআই কী ব্যবহার করুন বা কিছুক্ষণ অপেক্ষা করুন।"
+        : "Quota Limit Reached: The shared free tier limit has been exhausted. Please go to Settings (⚙️) and enter your own Gemini API Key to continue.";
+    } else if (message === 'API_KEY_MISSING') {
+      message = t.apiKeyMissing;
+    } else if (message.includes('403') || message.includes('permission')) {
+      message = language === 'bn'
+        ? "অনুমতি অস্বীকার: আপনার এপিআই কী এই মডেলের জন্য অনুমোদিত নয়।"
+        : "Permission Denied: Your API key is not authorized for this model or region.";
+    } else if (message.includes('{') && message.includes('error')) {
+      try {
+        const parsed = JSON.parse(message.substring(message.indexOf('{')));
+        if (parsed.error?.message) message = parsed.error.message;
+      } catch (e) {
+        // use original message
+      }
+    }
+
+    setError(message);
   };
 
   const saveApiKey = (key: string) => {
@@ -425,10 +451,14 @@ export default function App() {
         });
       } catch (e: any) {
         if (e.message?.includes('not found') || e.message?.includes('404')) {
-          // Fallback to a more stable model if available, though image generation is specific
-          throw new Error("The image generation model is not available for your API key yet. Please try again later or use a different key.");
+          // Fallback to a stable model
+          response = await ai.models.generateContent({
+            model: 'gemini-2.0-flash-exp',
+            contents,
+          });
+        } else {
+          throw e;
         }
-        throw e;
       }
 
       for (const part of response.candidates?.[0]?.content?.parts || []) {
@@ -438,8 +468,7 @@ export default function App() {
         }
       }
     } catch (err: any) {
-      console.error("Thumbnail generation failed:", err);
-      setError(err.message || "থাম্বনেইল তৈরি করতে ব্যর্থ হয়েছে। অনুগ্রহ করে আপনার এপিআই কী চেক করুন।");
+      handleGeminiError(err, language === 'bn' ? "থাম্বনেইল তৈরি করতে ব্যর্থ হয়েছে।" : "Failed to generate thumbnail.");
     } finally {
       setIsGeneratingThumbnail(false);
     }
@@ -490,8 +519,7 @@ export default function App() {
         throw new Error("Video generation completed but no video data was returned.");
       }
     } catch (err: any) {
-      console.error("Video generation failed:", err);
-      setError(err.message || "Failed to generate video. Veo might be unavailable for your key.");
+      handleGeminiError(err, language === 'bn' ? "ভিডিও তৈরি করতে ব্যর্থ হয়েছে।" : "Failed to generate video.");
     } finally {
       setIsGeneratingVideo(false);
       setVideoProgress('');
@@ -584,8 +612,7 @@ export default function App() {
         }));
       }
     } catch (err: any) {
-      console.error("AI Generation failed:", err);
-      setError(err.message || "Failed to generate content. Please check your API key.");
+      handleGeminiError(err, language === 'bn' ? "কন্টেন্ট তৈরি করতে ব্যর্থ হয়েছে।" : "Failed to generate content.");
     } finally {
       setIsGenerating(false);
     }
@@ -786,7 +813,7 @@ export default function App() {
             <div className="flex flex-col">
               <h1 className="text-xl md:text-2xl font-black tracking-tighter text-gray-900">{t.appName}</h1>
               <div className="flex items-center gap-2">
-                <span className="text-[9px] md:text-[10px] font-bold text-blue-600 tracking-widest uppercase">v1.3.2</span>
+                <span className="text-[9px] md:text-[10px] font-bold text-blue-600 tracking-widest uppercase">v1.3.3</span>
                 <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-black uppercase tracking-tighter italic">Public Mode</span>
               </div>
             </div>
